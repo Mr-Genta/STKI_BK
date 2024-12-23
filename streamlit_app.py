@@ -13,8 +13,8 @@ from sklearn import preprocessing
 
 client_id = '97aeaf1e98f943edb1344ab86f71692a'
 client_secret = '9f35e123caa7490b904ad6bcb98f4ba9'
-playlistId = '1dtCMTYzAOzwKXqklxPJNS'
-
+playlistId = '1dtCMTzAOzwKXqklxPJNS'
+Y
 # 37i9dQZF1DXbrUpGvoi3TS - 1(similar sad songs)
 # 1dtCMTYzAOzwKXqklxPJNS - 2(old songs, rock, rap)
 # 0IN7IWKmIfwlEysGyWUuRg - 3(mix of modern electronic, pop, and rock)
@@ -58,68 +58,79 @@ def getAuthHeader(token):
 
 # pengambilan audio features dari track (lagu)
 def getAudioFeatures(token, trackId):
-    url = f'https://api.spotify.com/v1/audio-features/{trackId}' # endpoint untuk akses playlist
-    headers = getAuthHeader(token) # ambil token untuk otorisasi, gunakan sebagai header
-    result = get(url, headers=headers) # kirim request GET ke spotify
-    json_result = json.loads(result.content) # parse response ke json
+    url = f'https://api.spotify.com/v1/audio-features/{trackId}'  # endpoint untuk akses playlist
+    headers = getAuthHeader(token)  # ambil token untuk otorisasi, gunakan sebagai header
+    result = get(url, headers=headers)  # kirim request GET ke spotify
+    json_result = json.loads(result.content)  # parse response ke json
 
-    # ambil data yang diperlukan dari response
-    audio_features_temp = [ 
-        json_result['danceability'],
-        json_result['energy'],
-        json_result['key'],
-        json_result['loudness'],
-        json_result['mode'],
-        json_result['speechiness'],
-        json_result['acousticness'],
-        json_result['instrumentalness'],
-        json_result['liveness'],
-        json_result['valence'],
-        json_result['tempo'],
-    ]
-    dataset2.append(audio_features_temp)
+    if not json_result:  # Jika respons kosong
+        st.error(f"Audio features for track ID {trackId} not found.")
+        return
+
+    try:
+        # Ambil data yang diperlukan dari response
+        audio_features_temp = [
+            json_result.get('danceability', 0),  # Default nilai 0 jika key tidak ditemukan
+            json_result.get('energy', 0),
+            json_result.get('key', 0),
+            json_result.get('loudness', 0),
+            json_result.get('mode', 0),
+            json_result.get('speechiness', 0),
+            json_result.get('acousticness', 0),
+            json_result.get('instrumentalness', 0),
+            json_result.get('liveness', 0),
+            json_result.get('valence', 0),
+            json_result.get('tempo', 0),
+        ]
+        dataset2.append(audio_features_temp)
+    except KeyError as e:
+        st.error(f"Key error: {e} in track ID {trackId}")
 
 # pengambilan track (lagu) dari playlist
 def getPlaylistItems(token, playlistId):
-    url = f'https://api.spotify.com/v1/playlists/{playlistId}/tracks' # endpoint untuk akses playlist
-    limit = '&limit=100' # batas maksimal track yang diambil
-    market = '?market=ID' # negara yang tempat aplikasi diakses
-    fields = '&fields=items%28track%28id%2Cname%2Cartists%2Cpopularity%2C+duration_ms%2C+album%28release_date%29%29%29' # format data dari track yang diambil
-    url = url+market+fields+limit # gabungkan semua parameter
-    headers = getAuthHeader(token) # ambil token untuk otorisasi, gunakan sebagai header
-    result = get(url, headers=headers) # kirim request GET ke spotify
-    json_result = json.loads(result.content) # parse response ke json
-    # print(json_result)
+    url = f'https://api.spotify.com/v1/playlists/{playlistId}/tracks'
+    limit = '&limit=100'
+    market = '?market=ID'
+    fields = '&fields=items(track(id,name,artists,popularity,duration_ms,album(release_date)))'
+    url = url + market + fields + limit
+    headers = getAuthHeader(token)
+    result = get(url, headers=headers)
+    json_result = json.loads(result.content)
+
+    if 'items' not in json_result:
+        st.error("No items found in the playlist. Please check the Playlist ID.")
+        return
 
     # ambil data yang diperlukan dari response
     for i in range(len(json_result['items'])):
-        playlist_items_temp = []
-        playlist_items_temp.append(json_result['items'][i]['track']['id'])
-        playlist_items_temp.append(
-            json_result['items'][i]['track']['name'].encode('utf-8'))
-        playlist_items_temp.append(
-            json_result['items'][i]['track']['artists'][0]['name'].encode('utf-8'))
-        playlist_items_temp.append(
-            json_result['items'][i]['track']['popularity'])
-        playlist_items_temp.append(
-            json_result['items'][i]['track']['duration_ms'])
-        playlist_items_temp.append(
-            int(json_result['items'][i]['track']['album']['release_date'][0:4]))
-        dataset.append(playlist_items_temp)
+        try:
+            track = json_result['items'][i]['track']
+            playlist_items_temp = [
+                track['id'],
+                track['name'].encode('utf-8'),
+                track['artists'][0]['name'].encode('utf-8'),
+                track['popularity'],
+                track['duration_ms'],
+                int(track['album']['release_date'][0:4])
+            ]
+            dataset.append(playlist_items_temp)
+        except KeyError as e:
+            st.warning(f"Skipping track due to missing data: {e}")
 
-    # ambil audio features dari semua track di dalam playlist
     for i in range(len(dataset)):
         getAudioFeatures(token, dataset[i][0])
 
-    # gabungkan dataset dan dataset2
     for i in range(len(dataset)):
-        dataset3.append(dataset[i]+dataset2[i])
+        dataset3.append(dataset[i] + dataset2[i])
 
-    # convert dataset3 into csv
     with open('dataset.csv', 'w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(["id", "name", "artist", "popularity", "duration_ms", "year", "danceability", "energy", "key", "loudness", "mode",
-                         "speechiness", "acousticness", "instrumentalness", "liveness", "valence", "tempo"])
+        writer.writerow([
+            "id", "name", "artist", "popularity", "duration_ms", "year",
+            "danceability", "energy", "key", "loudness", "mode",
+            "speechiness", "acousticness", "instrumentalness",
+            "liveness", "valence", "tempo"
+        ])
         writer.writerows(dataset3)
 
     dataProcessing()
@@ -183,8 +194,8 @@ def dataProcessing():
 
     st.write("Process Done!")
 
-st.write("# Spotify Playlist Clustering")
-st.write("### Made by Rifky Ariya Pratama")
+st.write("Processing playlist...")
+st.write(f"Dataset size: {len(dataset)}")
 
 client_id = st.text_input("Enter Client ID")
 client_secret = st.text_input("Enter Client Secret")
